@@ -1,5 +1,9 @@
 package com.mossonthetree.chatappkotlin
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Button
@@ -7,9 +11,13 @@ import android.widget.EditText
 import android.widget.Toast
 
 class MainActivity : AppCompatActivity() {
+    val userNameReqCode = 1001
+
     lateinit var udpCon: UdpClient
 
     lateinit var receiveThread: Thread
+
+    lateinit var prefs: SharedPreferences
 
     var clientName: String? = null
 
@@ -18,11 +26,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         udpCon = UdpClient("192.168.1.100", 8081);
-        if(!udpCon.inError) {
-            Toast.makeText(this, "Udp socket open", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "No connection", Toast.LENGTH_SHORT).show()
-        }
 
         receiveThread = Thread(Runnable {
             while(!udpCon.inError) {
@@ -34,21 +37,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
             }
+            println("mossonthetreeapp Ending receiving")
         })
-
         receiveThread.start()
 
-        findViewById<Button>(R.id.btnConnect).setOnClickListener{ v ->
+        findViewById<Button>(R.id.btnSend).setOnClickListener {v ->
             Thread(Runnable {
-                if(clientName == null) {
-                    clientName = findViewById<EditText>(R.id.edtName).text.toString()
-                    udpCon.sendData(AppMessage(2, clientName))
-                }
-            }).start()
-        }
-
-        findViewById<Button>(R.id.btnSend).setOnClickListener { v ->
-            Thread(Runnable {
+                println("mossonthetreeapp Sending...")
                 val recipient = findViewById<EditText>(R.id.edtName).text.toString()
                 val msg = findViewById<EditText>(R.id.edtMsg).text.toString()
                 if(msg.isNotEmpty()) {
@@ -56,6 +51,22 @@ class MainActivity : AppCompatActivity() {
                     udpCon.sendData(AppMessage(1, clientMessage))
                 }
             }).start()
+        }
+
+        prefs = getSharedPreferences("chat", 0)
+        clientName = prefs.getString("user_name", "")
+        if(clientName.isNullOrEmpty()) {
+            startActivityForResult(Intent(this, UserName::class.java), userNameReqCode)
+        } else {
+            connect(clientName!!)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if(requestCode == userNameReqCode && resultCode == Activity.RESULT_OK) {
+            clientName = data?.getStringExtra("user_name")
+            connect(clientName!!)
         }
     }
 
@@ -67,5 +78,11 @@ class MainActivity : AppCompatActivity() {
         })
         thread.start()
         thread.join()
+    }
+
+    private fun connect(userName: String): Unit {
+        Thread(Runnable {
+            udpCon.sendData(AppMessage(2, userName))
+        }).start()
     }
 }
